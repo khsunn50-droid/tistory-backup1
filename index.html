@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>대화 백업 에디터</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&family=Lexend:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0f0f13; --surface: #1a1a23; --surface-hover: #22222e;
+    --border: #2a2a3a; --accent: #6c5ce7; --accent-light: #a29bfe;
+    --accent-glow: rgba(108,92,231,0.25); --text: #e8e8f0;
+    --text-dim: #8888a0; --text-muted: #55556a;
+    --bubble-left: #1e1e2e; --bubble-right: #6c5ce7;
+    --danger: #e74c3c; --success: #2ecc71; --radius: 14px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Noto Sans KR',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+
+  .app-header {
+    position:sticky; top:0; z-index:100;
+    background:rgba(15,15,19,0.85); backdrop-filter:blur(20px);
+    border-bottom:1px solid var(--border); padding:16px 24px;
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .app-title { font-family:'Lexend',sans-serif; font-size:20px; font-weight:600; background:linear-gradient(135deg,var(--accent-light),var(--accent)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .header-actions { display:flex; gap:10px; flex-wrap:wrap; }
+  .header-actions button { font-family:'Noto Sans KR',sans-serif; padding:8px 18px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.2s; }
+  .header-actions button:hover { border-color:var(--accent); background:var(--surface-hover); }
+  .header-actions button:disabled { opacity:0.35; cursor:not-allowed; border-color:var(--border); background:var(--surface); }
+  .header-actions button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .header-actions button.primary:hover { background:#7c6ef7; }
+
+  .layout { display:flex; max-width:1200px; margin:0 auto; min-height:calc(100vh - 65px); }
+
+  .side-panel { width:320px; min-width:320px; border-right:1px solid var(--border); padding:24px; overflow-y:auto; }
+  .panel-title { font-size:13px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:14px; }
+  .participant-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:12px; transition:all 0.2s; }
+  .participant-card:hover { border-color:var(--accent); }
+  .participant-avatar-wrap { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+  .avatar { width:48px; height:48px; border-radius:50%; object-fit:cover; border:2px solid var(--border); flex-shrink:0; }
+  .avatar-placeholder { width:48px; height:48px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent-light)); display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; color:#fff; flex-shrink:0; }
+  .participant-name { font-size:15px; font-weight:600; color:var(--text); }
+  .participant-side { font-size:11px; color:var(--text-muted); margin-top:2px; }
+  .avatar-upload-btn { display:block; width:100%; padding:8px; border-radius:8px; border:1px dashed var(--border); background:transparent; color:var(--text-dim); font-size:12px; cursor:pointer; transition:all 0.2s; font-family:'Noto Sans KR',sans-serif; }
+  .avatar-upload-btn:hover { border-color:var(--accent); color:var(--accent-light); }
+  .name-input { width:100%; padding:8px 12px; margin-top:8px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; font-family:'Noto Sans KR',sans-serif; outline:none; transition:border 0.2s; }
+  .name-input:focus { border-color:var(--accent); }
+  .add-participant-btn { width:100%; padding:12px; margin-top:8px; border:2px dashed var(--border); border-radius:var(--radius); background:transparent; color:var(--text-dim); font-size:14px; font-weight:500; cursor:pointer; transition:all 0.2s; font-family:'Noto Sans KR',sans-serif; }
+  .add-participant-btn:hover { border-color:var(--accent); color:var(--accent-light); }
+  .delete-btn { margin-top:8px; width:100%; padding:6px; border:none; border-radius:6px; background:rgba(231,76,60,0.1); color:var(--danger); font-size:11px; cursor:pointer; transition:all 0.2s; font-family:'Noto Sans KR',sans-serif; }
+  .delete-btn:hover { background:rgba(231,76,60,0.2); }
+
+  /* 테마 칩 */
+  .theme-chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
+  .theme-chip { display:flex; align-items:center; gap:6px; padding:6px 14px; border-radius:20px; border:2px solid var(--border); background:var(--bg); color:var(--text-dim); font-size:12px; font-weight:500; cursor:pointer; transition:all 0.2s; font-family:'Noto Sans KR',sans-serif; }
+  .theme-chip:hover { border-color:var(--accent); }
+  .theme-chip.active { border-color:var(--accent); color:var(--accent-light); background:var(--accent-glow); }
+  .theme-dot { width:14px; height:14px; border-radius:50%; flex-shrink:0; }
+
+  /* 색상 커스텀 */
+  .color-custom-section { margin-top:12px; }
+  .color-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .color-row label { font-size:12px; color:var(--text-dim); flex:1; }
+  .color-row input[type="color"] { width:32px; height:28px; border:1px solid var(--border); border-radius:6px; background:var(--bg); cursor:pointer; padding:2px; }
+
+  /* 파일 불러오기 */
+  .import-section { margin-top:12px; }
+  .import-btn { width:100%; padding:12px; border-radius:var(--radius); border:2px dashed var(--border); background:transparent; color:var(--text-dim); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.2s; font-family:'Noto Sans KR',sans-serif; text-align:center; }
+  .import-btn:hover { border-color:var(--accent); color:var(--accent-light); }
+  .import-hint { font-size:11px; color:var(--text-muted); margin-top:6px; line-height:1.5; }
+
+  /* 날짜 */
+  .date-section { max-width:700px; width:100%; margin:0 auto 16px; display:flex; align-items:center; gap:10px; }
+  .date-section label { font-size:13px; color:var(--text-dim); font-weight:500; white-space:nowrap; }
+  .date-section input { flex:1; padding:8px 12px; border-radius:8px; background:var(--surface); border:1px solid var(--border); color:var(--text); font-size:13px; font-family:'Noto Sans KR',sans-serif; outline:none; }
+  .date-section input:focus { border-color:var(--accent); }
+
+  .chat-area {
+    flex:1; display:flex; flex-direction:column; padding:24px; overflow-y:auto;
+    background: radial-gradient(ellipse at 20% 0%, rgba(108,92,231,0.04) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 100%, rgba(162,155,254,0.03) 0%, transparent 60%);
+  }
+  .chat-container {
+    flex:1; display:flex; flex-direction:column; gap:4px;
+    max-width:680px; width:100%; margin:0 auto;
+    padding:16px 8px;
+  }
+
+  /* 메시지 그룹 */
+  .msg-group {
+    display:flex; gap:10px; align-items:flex-end;
+    position:relative; animation:msgSlide 0.35s cubic-bezier(0.16,1,0.3,1);
+    padding:2px 0;
+  }
+  .msg-group.right { flex-direction:row-reverse; }
+  .msg-group.first-in-group { margin-top:14px; }
+
+  @keyframes msgSlide {
+    from { opacity:0; transform:translateY(12px) scale(0.97); }
+    to { opacity:1; transform:translateY(0) scale(1); }
+  }
+
+  /* 아바타 */
+  .msg-avatar {
+    width:38px; height:38px; border-radius:50%;
+    object-fit:cover; flex-shrink:0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    border: 2px solid rgba(255,255,255,0.08);
+    transition: transform 0.2s;
+  }
+  .msg-avatar:hover { transform: scale(1.08); }
+  .msg-avatar-placeholder {
+    width:38px; height:38px; border-radius:50%;
+    background:linear-gradient(145deg,var(--accent),var(--accent-light));
+    display:flex; align-items:center; justify-content:center;
+    font-size:15px; font-weight:700; color:#fff; flex-shrink:0;
+    box-shadow: 0 2px 8px rgba(108,92,231,0.3);
+    border: 2px solid rgba(255,255,255,0.08);
+    transition: transform 0.2s;
+  }
+  .msg-avatar-placeholder:hover { transform: scale(1.08); }
+  .msg-avatar-spacer { width:38px; flex-shrink:0; }
+
+  /* 메시지 내용 */
+  .msg-content { max-width:72%; display:flex; flex-direction:column; }
+  .msg-sender {
+    font-size:11px; font-weight:600; color:var(--text-dim);
+    margin-bottom:3px; padding:0 8px;
+    letter-spacing: 0.3px;
+  }
+  .msg-group.right .msg-sender { text-align:right; }
+
+  /* 말풍선 */
+  .msg-bubble {
+    padding:10px 16px; border-radius:20px;
+    font-size:14px; line-height:1.65; letter-spacing:-0.01em;
+    word-break:break-word; cursor:pointer;
+    transition: all 0.2s cubic-bezier(0.16,1,0.3,1);
+    position:relative;
+  }
+  .msg-group.left .msg-bubble {
+    background: var(--bubble-left);
+    border-bottom-left-radius:6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.03) inset;
+  }
+  .msg-group.right .msg-bubble {
+    background: var(--bubble-right);
+    color:#fff;
+    border-bottom-right-radius:6px;
+    box-shadow: 0 2px 8px rgba(108,92,231,0.25), 0 0 0 1px rgba(255,255,255,0.08) inset;
+  }
+  .msg-bubble:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  }
+  .msg-group.right .msg-bubble:hover {
+    box-shadow: 0 4px 20px rgba(108,92,231,0.35);
+  }
+
+  /* 수정/삭제 버튼 */
+  .msg-actions {
+    position:absolute; top:-10px;
+    display:none; gap:3px; z-index:5;
+  }
+  .msg-group.left .msg-actions { right:-6px; }
+  .msg-group.right .msg-actions { left:-6px; right:auto; }
+  .msg-group:hover .msg-actions { display:flex; }
+  .msg-action-btn {
+    width:28px; height:28px; border-radius:50%;
+    border:1px solid var(--border);
+    background:var(--surface); color:var(--text-dim);
+    font-size:12px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:all 0.2s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    backdrop-filter: blur(8px);
+  }
+  .msg-action-btn:hover { background:var(--accent); color:#fff; border-color:var(--accent); transform:scale(1.1); }
+  .msg-action-btn.del:hover { background:var(--danger); border-color:var(--danger); }
+
+  /* 입력바 */
+  .input-bar {
+    max-width:680px; width:100%; margin:20px auto 0;
+    display:flex; gap:10px; align-items:flex-end;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 6px 6px 6px 16px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .input-bar:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+  .input-bar select {
+    padding:8px 10px; border-radius:12px;
+    background:var(--bg); border:1px solid var(--border);
+    color:var(--text); font-size:12px; font-family:'Noto Sans KR',sans-serif;
+    outline:none; cursor:pointer; min-width:80px;
+  }
+  .input-bar select:focus { border-color:var(--accent); }
+  .input-bar textarea {
+    flex:1; padding:8px 4px; border-radius:0; border:none;
+    background:transparent;
+    color:var(--text); font-size:14px; font-family:'Noto Sans KR',sans-serif;
+    outline:none; resize:none; min-height:36px; max-height:120px; line-height:1.5;
+  }
+  .send-btn {
+    width:38px; height:38px; border-radius:50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-light));
+    border:none; color:#fff; font-size:16px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:all 0.25s cubic-bezier(0.16,1,0.3,1); flex-shrink:0;
+    box-shadow: 0 2px 8px rgba(108,92,231,0.3);
+  }
+  .send-btn:hover { transform:scale(1.12); box-shadow: 0 4px 16px rgba(108,92,231,0.45); }
+
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(8px); z-index:1000; display:none; align-items:center; justify-content:center; }
+  .modal-overlay.show { display:flex; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:28px; width:90%; max-width:460px; animation:modalIn 0.25s ease; }
+  @keyframes modalIn { from{opacity:0;transform:scale(0.95) translateY(10px);} }
+  .modal h3 { font-size:17px; font-weight:600; margin-bottom:18px; }
+  .modal textarea { width:100%; min-height:100px; padding:12px; background:var(--bg); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:14px; font-family:'Noto Sans KR',sans-serif; outline:none; resize:vertical; line-height:1.6; }
+  .modal textarea:focus { border-color:var(--accent); }
+  .modal-btns { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+  .modal-btns button { padding:8px 20px; border-radius:10px; border:none; font-size:13px; font-weight:500; cursor:pointer; font-family:'Noto Sans KR',sans-serif; transition:all 0.2s; }
+  .modal-btns .cancel { background:var(--bg); color:var(--text-dim); border:1px solid var(--border); }
+  .modal-btns .cancel:hover { border-color:var(--text-muted); }
+  .modal-btns .confirm { background:var(--accent); color:#fff; }
+  .modal-btns .confirm:hover { background:#7c6ef7; }
+  .code-output { width:100%; min-height:200px; max-height:400px; padding:12px; background:#0d0d12; border:1px solid var(--border); border-radius:10px; color:#a0ffa0; font-size:12px; font-family:'Courier New',monospace; outline:none; resize:vertical; line-height:1.5; }
+  .copy-btn { padding:8px 20px; border-radius:10px; border:none; background:var(--success); color:#fff; font-size:13px; font-weight:500; cursor:pointer; font-family:'Noto Sans KR',sans-serif; }
+  .copy-btn:hover { filter:brightness(1.1); }
+
+  /* 불러오기 결과 알림 */
+  .toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:var(--accent); color:#fff; padding:12px 24px; border-radius:12px; font-size:14px; font-weight:500; z-index:2000; animation:toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards; }
+  @keyframes toastIn { from{opacity:0;transform:translateX(-50%) translateY(20px);} }
+  @keyframes toastOut { to{opacity:0;transform:translateX(-50%) translateY(20px);} }
+
+  /* 참여자 매핑 모달 */
+  .mapping-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .mapping-row .name-tag { font-size:13px; font-weight:600; color:var(--text); background:var(--bg); padding:6px 12px; border-radius:8px; min-width:80px; }
+  .mapping-row select { flex:1; padding:8px; border-radius:8px; background:var(--bg); border:1px solid var(--border); color:var(--text); font-size:13px; font-family:'Noto Sans KR',sans-serif; outline:none; }
+
+  @media (max-width:768px) {
+    .layout { flex-direction:column; }
+    .side-panel { width:100%; min-width:100%; border-right:none; border-bottom:1px solid var(--border); max-height:40vh; }
+    .app-title { font-size:16px; }
+    .header-actions button { padding:6px 12px; font-size:12px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="app-title">💬 채팅 백업 에디터</div>
+  <div class="header-actions">
+    <button onclick="undo()" id="undoBtn" disabled title="되돌리기 (Ctrl+Z)">↩ 되돌리기</button>
+    <button onclick="redo()" id="redoBtn" disabled title="다시하기 (Ctrl+Y)">↪ 다시하기</button>
+    <button onclick="triggerImport()">📂 파일 불러오기</button>
+    <button onclick="exportHTML()">📋 HTML 코드 복사</button>
+    <button class="primary" onclick="showPreview()">👁 미리보기</button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="side-panel">
+    <div class="panel-title">👤 참여자 관리</div>
+    <div id="participantList"></div>
+    <button class="add-participant-btn" onclick="addParticipant()">+ 참여자 추가</button>
+
+    <div class="panel-title" style="margin-top:28px;">🎨 테마 선택</div>
+    <div class="theme-chips" id="themeChips"></div>
+
+    <div class="panel-title" style="margin-top:28px;">🎨 색상 커스텀</div>
+    <div class="color-custom-section" id="colorCustom"></div>
+  </aside>
+
+  <main class="chat-area">
+    <div class="date-section">
+      <label>📅 날짜</label>
+      <input type="text" id="chatDate" placeholder="예: 2026년 4월 28일 월요일" value="2026년 4월 28일 월요일">
+    </div>
+    <div class="chat-container" id="chatContainer"></div>
+    <div class="input-bar">
+      <select id="senderSelect"></select>
+      <textarea id="msgInput" placeholder="메시지를 입력하세요..." rows="1" onkeydown="handleKey(event)"></textarea>
+      <button class="send-btn" onclick="sendMessage()">➤</button>
+    </div>
+  </main>
+</div>
+
+<!-- 숨겨진 파일 인풋 -->
+<input type="file" id="importFileInput" accept=".txt,.csv,.xlsx,.xls" style="display:none" onchange="handleImportFile(event)">
+
+<!-- 수정 모달 -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3>✏️ 메시지 수정</h3>
+    <textarea id="editText"></textarea>
+    <div class="modal-btns">
+      <button class="cancel" onclick="closeEdit()">취소</button>
+      <button class="confirm" onclick="saveEdit()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 코드 출력 모달 -->
+<div class="modal-overlay" id="codeModal">
+  <div class="modal" style="max-width:640px;">
+    <h3>📋 티스토리 HTML 코드</h3>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">아래 코드를 복사해서 티스토리 글쓰기 → HTML 모드에 붙여넣기 하세요.</p>
+    <textarea class="code-output" id="codeOutput" readonly></textarea>
+    <div class="modal-btns">
+      <button class="cancel" onclick="closeCode()">닫기</button>
+      <button class="copy-btn" onclick="copyCode()">📋 코드 복사</button>
+    </div>
+  </div>
+</div>
+
+<!-- 미리보기 모달 -->
+<div class="modal-overlay" id="previewModal">
+  <div class="modal" style="max-width:640px;max-height:80vh;overflow-y:auto;">
+    <h3>👁 미리보기</h3>
+    <div id="previewContent" style="margin-top:12px;"></div>
+    <div class="modal-btns" style="margin-top:20px;">
+      <button class="cancel" onclick="closePreview()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 참여자 매핑 모달 -->
+<div class="modal-overlay" id="mappingModal">
+  <div class="modal" style="max-width:500px;">
+    <h3>👥 참여자 방향 설정</h3>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">불러온 대화에서 발견된 참여자입니다. 각 참여자의 말풍선 방향을 설정해 주세요.</p>
+    <div id="mappingRows"></div>
+    <div class="modal-btns">
+      <button class="cancel" onclick="closeMappingModal()">취소</button>
+      <button class="confirm" onclick="applyMapping()">적용</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 테마 ──
+const THEMES = {
+  kakao: { name:'카카오톡', dot:'linear-gradient(135deg,#FEE500,#E5C900)', containerBg:'#B2C7D9', bubbleLeft:'#FFFFFF', bubbleLeftColor:'#333', bubbleRight:'#FEE500', bubbleRightColor:'#333', nameColor:'#555', dateBg:'rgba(0,0,0,0.15)', dateColor:'#fff', avatarGrad1:'#FEE500', avatarGrad2:'#E5C900', border:'#A0B5C5' },
+  line: { name:'LINE', dot:'linear-gradient(135deg,#06C755,#04A344)', containerBg:'#8CAAB9', bubbleLeft:'#FFFFFF', bubbleLeftColor:'#333', bubbleRight:'#06C755', bubbleRightColor:'#fff', nameColor:'#444', dateBg:'rgba(0,0,0,0.15)', dateColor:'#fff', avatarGrad1:'#06C755', avatarGrad2:'#04A344', border:'#7A99A8' },
+  imessage: { name:'iMessage', dot:'linear-gradient(135deg,#34AADC,#007AFF)', containerBg:'#FFFFFF', bubbleLeft:'#E9E9EB', bubbleLeftColor:'#333', bubbleRight:'#007AFF', bubbleRightColor:'#fff', nameColor:'#888', dateBg:'rgba(0,0,0,0.05)', dateColor:'#8E8E93', avatarGrad1:'#007AFF', avatarGrad2:'#34AADC', border:'#E0E0E0' },
+  dark: { name:'다크', dot:'linear-gradient(135deg,#6c5ce7,#a29bfe)', containerBg:'#1a1a2e', bubbleLeft:'#2d2d44', bubbleLeftColor:'#e0e0e0', bubbleRight:'#6c5ce7', bubbleRightColor:'#fff', nameColor:'#8888a0', dateBg:'rgba(255,255,255,0.06)', dateColor:'#8888a0', avatarGrad1:'#6c5ce7', avatarGrad2:'#a29bfe', border:'#2d2d44' },
+  pastel: { name:'파스텔', dot:'linear-gradient(135deg,#FDA7DF,#D980FA)', containerBg:'#FFF5FB', bubbleLeft:'#FFFFFF', bubbleLeftColor:'#555', bubbleRight:'#FDA7DF', bubbleRightColor:'#4a3347', nameColor:'#B56DA0', dateBg:'rgba(253,167,223,0.15)', dateColor:'#B56DA0', avatarGrad1:'#FDA7DF', avatarGrad2:'#D980FA', border:'#F0D4E8' },
+  mint: { name:'민트', dot:'linear-gradient(135deg,#00B894,#55E6C1)', containerBg:'#F0FFF9', bubbleLeft:'#FFFFFF', bubbleLeftColor:'#333', bubbleRight:'#00B894', bubbleRightColor:'#fff', nameColor:'#2d8a6e', dateBg:'rgba(0,184,148,0.1)', dateColor:'#2d8a6e', avatarGrad1:'#00B894', avatarGrad2:'#55E6C1', border:'#C8F0E3' },
+  custom: { name:'커스텀', dot:'linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff)', containerBg:'#F5F5F5', bubbleLeft:'#FFFFFF', bubbleLeftColor:'#333333', bubbleRight:'#5B6FED', bubbleRightColor:'#FFFFFF', nameColor:'#888888', dateBg:'rgba(0,0,0,0.08)', dateColor:'#888888', avatarGrad1:'#5B6FED', avatarGrad2:'#8B9CF7', border:'#E0E0E0' },
+};
+
+let currentTheme = 'kakao';
+let participants = [
+  { id:'p1', name:'나', side:'right', avatar:null },
+  { id:'p2', name:'상대방', side:'left', avatar:null },
+];
+let messages = [];
+let editingMsgId = null;
+let pendingImportData = null;
+
+// ── Undo/Redo 시스템 ──
+let undoStack = [];
+let redoStack = [];
+let skipSave = false;
+
+function deepClone(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+function saveState() {
+  if (skipSave) return;
+  undoStack.push({ messages: deepClone(messages), participants: deepClone(participants) });
+  redoStack = []; // 새 동작이 생기면 redo 스택 초기화
+  if (undoStack.length > 50) undoStack.shift(); // 최대 50단계
+  updateUndoRedoBtns();
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  redoStack.push({ messages: deepClone(messages), participants: deepClone(participants) });
+  const prev = undoStack.pop();
+  skipSave = true;
+  messages = prev.messages;
+  participants = prev.participants;
+  renderParticipants();
+  renderMessages();
+  skipSave = false;
+  updateUndoRedoBtns();
+  showToast('↩ 되돌리기 완료');
+}
+
+function redo() {
+  if (redoStack.length === 0) return;
+  undoStack.push({ messages: deepClone(messages), participants: deepClone(participants) });
+  const next = redoStack.pop();
+  skipSave = true;
+  messages = next.messages;
+  participants = next.participants;
+  renderParticipants();
+  renderMessages();
+  skipSave = false;
+  updateUndoRedoBtns();
+  showToast('↪ 다시하기 완료');
+}
+
+function updateUndoRedoBtns() {
+  document.getElementById('undoBtn').disabled = undoStack.length === 0;
+  document.getElementById('redoBtn').disabled = redoStack.length === 0;
+}
+
+// 키보드 단축키 Ctrl+Z / Ctrl+Y
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+});
+
+// ── 색상 커스텀 필드 정의 ──
+const COLOR_FIELDS = [
+  { key:'containerBg', label:'배경색' },
+  { key:'bubbleLeft', label:'상대 말풍선' },
+  { key:'bubbleLeftColor', label:'상대 글자색' },
+  { key:'bubbleRight', label:'내 말풍선' },
+  { key:'bubbleRightColor', label:'내 글자색' },
+  { key:'nameColor', label:'이름 색' },
+  { key:'dateColor', label:'날짜 색' },
+  { key:'border', label:'테두리 색' },
+];
+
+function renderThemeChips() {
+  const c = document.getElementById('themeChips'); c.innerHTML = '';
+  Object.entries(THEMES).forEach(([key, t]) => {
+    const chip = document.createElement('button');
+    chip.className = `theme-chip ${key === currentTheme ? 'active' : ''}`;
+    chip.innerHTML = `<span class="theme-dot" style="background:${t.dot};"></span>${t.name}`;
+    chip.onclick = () => { currentTheme = key; renderThemeChips(); renderColorCustom(); };
+    c.appendChild(chip);
+  });
+}
+
+function renderColorCustom() {
+  const sec = document.getElementById('colorCustom');
+  if (currentTheme !== 'custom') {
+    sec.innerHTML = '<p style="font-size:12px;color:var(--text-muted);">커스텀 테마를 선택하면 색상을 직접 설정할 수 있어요.</p>';
+    return;
+  }
+  sec.innerHTML = '';
+  const t = THEMES.custom;
+  COLOR_FIELDS.forEach(f => {
+    const row = document.createElement('div');
+    row.className = 'color-row';
+    row.innerHTML = `<label>${f.label}</label><input type="color" value="${t[f.key]}" onchange="updateCustomColor('${f.key}', this.value)">`;
+    sec.appendChild(row);
+  });
+}
+
+function updateCustomColor(key, val) {
+  THEMES.custom[key] = val;
+  // 아바타 그라데이션도 연동
+  if (key === 'bubbleRight') { THEMES.custom.avatarGrad1 = val; }
+}
+
+// ── 참여자 관리 ──
+function renderParticipants() {
+  const list = document.getElementById('participantList');
+  const select = document.getElementById('senderSelect');
+  list.innerHTML = ''; select.innerHTML = '';
+  participants.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'participant-card';
+    card.innerHTML = `
+      <div class="participant-avatar-wrap">
+        ${p.avatar ? `<img class="avatar" src="${p.avatar}" alt="${p.name}">` : `<div class="avatar-placeholder">${p.name[0]}</div>`}
+        <div><div class="participant-name">${p.name}</div><div class="participant-side">${p.side==='right'?'오른쪽 (나)':'왼쪽 (상대)'}</div></div>
+      </div>
+      <input class="name-input" value="${p.name}" placeholder="이름 입력" onchange="updateName('${p.id}',this.value)">
+      <button class="avatar-upload-btn" onclick="triggerUpload('${p.id}')">🖼 프로필 사진 ${p.avatar?'변경':'추가'}</button>
+      <select class="name-input" style="margin-top:6px;" onchange="updateSide('${p.id}',this.value)">
+        <option value="left" ${p.side==='left'?'selected':''}>왼쪽 (상대)</option>
+        <option value="right" ${p.side==='right'?'selected':''}>오른쪽 (나)</option>
+      </select>
+      ${participants.length>2?`<button class="delete-btn" onclick="removeParticipant('${p.id}')">삭제</button>`:''}`;
+    list.appendChild(card);
+    const opt = document.createElement('option');
+    opt.value = p.id; opt.textContent = p.name; select.appendChild(opt);
+  });
+  if (!document.getElementById('avatarInput')) {
+    const fi = document.createElement('input');
+    fi.type='file'; fi.id='avatarInput'; fi.accept='image/*'; fi.style.display='none'; fi.onchange=handleAvatarUpload;
+    document.body.appendChild(fi);
+  }
+}
+
+let uploadTargetId = null;
+function triggerUpload(pid) { uploadTargetId=pid; document.getElementById('avatarInput').click(); }
+function handleAvatarUpload(e) {
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=(ev)=>{ const p=participants.find(x=>x.id===uploadTargetId); if(p){saveState(); p.avatar=ev.target.result; renderParticipants(); renderMessages();} };
+  r.readAsDataURL(file); e.target.value='';
+}
+function updateName(pid,name) { const p=participants.find(x=>x.id===pid); if(p){saveState(); p.name=name||'이름없음'; renderParticipants(); renderMessages();} }
+function updateSide(pid,side) { const p=participants.find(x=>x.id===pid); if(p){saveState(); p.side=side; renderParticipants(); renderMessages();} }
+function addParticipant() { saveState(); participants.push({id:'p'+Date.now(), name:'참여자'+(participants.length+1), side:'left', avatar:null}); renderParticipants(); }
+function removeParticipant(pid) { if(participants.length<=2) return; saveState(); participants=participants.filter(x=>x.id!==pid); messages=messages.filter(m=>m.senderId!==pid); renderParticipants(); renderMessages(); }
+
+// ── 메시지 관리 ──
+function sendMessage() {
+  const input=document.getElementById('msgInput'); const text=input.value.trim(); if(!text) return;
+  saveState();
+  messages.push({id:'m'+Date.now(), senderId:document.getElementById('senderSelect').value, text});
+  input.value=''; input.style.height='auto'; renderMessages();
+  document.querySelector('.chat-area').scrollTop=document.querySelector('.chat-area').scrollHeight;
+}
+function handleKey(e) {
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); sendMessage();}
+  setTimeout(()=>{e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,120)+'px';},0);
+}
+function renderMessages() {
+  const c=document.getElementById('chatContainer'); c.innerHTML='';
+  messages.forEach((msg,i)=>{
+    const p=participants.find(x=>x.id===msg.senderId); if(!p) return;
+    const side=p.side; const prev=messages[i-1]; const same=prev&&prev.senderId===msg.senderId;
+    const g=document.createElement('div');
+    g.className=`msg-group ${side}${!same?' first-in-group':''}`;
+    const av=same
+      ?`<div class="msg-avatar-spacer"></div>`
+      :(p.avatar
+        ?`<img class="msg-avatar" src="${p.avatar}" alt="${p.name}">`
+        :`<div class="msg-avatar-placeholder">${p.name[0]}</div>`);
+    g.innerHTML=`${av}<div class="msg-content">${!same?`<div class="msg-sender">${p.name}</div>`:''}<div class="msg-bubble">${escapeHtml(msg.text).replace(/\n/g,'<br>')}</div><div class="msg-actions"><button class="msg-action-btn" onclick="openEdit('${msg.id}')" title="수정">✎</button><button class="msg-action-btn del" onclick="deleteMsg('${msg.id}')" title="삭제">✕</button></div></div>`;
+    c.appendChild(g);
+  });
+}
+function escapeHtml(s){const d=document.createElement('div'); d.textContent=s; return d.innerHTML;}
+function openEdit(mid){editingMsgId=mid; const m=messages.find(x=>x.id===mid); if(!m) return; document.getElementById('editText').value=m.text; document.getElementById('editModal').classList.add('show');}
+function closeEdit(){document.getElementById('editModal').classList.remove('show'); editingMsgId=null;}
+function saveEdit(){const m=messages.find(x=>x.id===editingMsgId); if(m){saveState(); m.text=document.getElementById('editText').value; renderMessages();} closeEdit();}
+function deleteMsg(mid){saveState(); messages=messages.filter(m=>m.id!==mid); renderMessages();}
+
+// ══════════════════════════════════════
+// ── 파일 불러오기 (카카오톡 txt, xlsx) ──
+// ══════════════════════════════════════
+function triggerImport() { document.getElementById('importFileInput').click(); }
+
+function handleImportFile(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  if (ext === 'txt' || ext === 'csv') {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target.result;
+      const parsed = parseKakaoTxt(text);
+      if (parsed.length > 0) {
+        showMappingModal(parsed);
+      } else {
+        showToast('파싱된 메시지가 없습니다. 카카오톡 내보내기 형식인지 확인해 주세요.');
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  } else if (ext === 'xlsx' || ext === 'xls') {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        const parsed = parseXlsx(data);
+        if (parsed.length > 0) {
+          showMappingModal(parsed);
+        } else {
+          showToast('파싱된 메시지가 없습니다. 이름/내용 열이 있는지 확인해 주세요.');
+        }
+      } catch (err) {
+        showToast('엑셀 파일을 읽는 중 오류가 발생했습니다.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    showToast('지원하지 않는 파일 형식입니다. txt, csv, xlsx 파일을 사용해 주세요.');
+  }
+  e.target.value = '';
+}
+
+// 카카오톡 txt 파싱
+function parseKakaoTxt(text) {
+  const lines = text.split('\n');
+  const results = [];
+  // 카카오톡 내보내기 형식들:
+  // [이름] [오후 3:30] 메시지내용
+  // 2024년 1월 1일 오전 10:30, 이름 : 메시지내용
+  // [2024. 1. 1. 오후 3:30] 이름 : 메시지
+  // 날짜 라인: -----------  2024년 1월 1일 월요일 -----------
+  // 또는: 2024년 1월 1일 화요일
+
+  let detectedDate = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // 날짜 라인 감지
+    const dateMatch1 = line.match(/[-─]+\s*(\d{4}년\s*\d{1,2}월\s*\d{1,2}일[^-─]*?)[-─]+/);
+    const dateMatch2 = line.match(/^(\d{4}년\s*\d{1,2}월\s*\d{1,2}일\s*\S+요일)\s*$/);
+    if (dateMatch1) { detectedDate = dateMatch1[1].trim(); continue; }
+    if (dateMatch2) { detectedDate = dateMatch2[1].trim(); continue; }
+
+    // 패턴1: [이름] [시간] 메시지
+    const p1 = line.match(/^\[([^\]]+)\]\s*\[[^\]]*\]\s*(.+)$/);
+    if (p1) { results.push({ name: p1[1].trim(), text: p1[2].trim() }); continue; }
+
+    // 패턴2: 날짜시간, 이름 : 메시지
+    const p2 = line.match(/^\d{4}[년.]\s*\d{1,2}[월.]\s*\d{1,2}[일.]?\s*[오전후]*\s*\d{1,2}:\d{2},?\s*([^:]+?)\s*:\s*(.+)$/);
+    if (p2) { results.push({ name: p2[1].trim(), text: p2[2].trim() }); continue; }
+
+    // 패턴3: [날짜 시간] 이름 : 메시지
+    const p3 = line.match(/^\[[\d\s.년월일오전후:]+\]\s*([^:]+?)\s*:\s*(.+)$/);
+    if (p3) { results.push({ name: p3[1].trim(), text: p3[2].trim() }); continue; }
+
+    // 패턴4: 이름 : 메시지 (심플)
+    const p4 = line.match(/^([^:]{1,20})\s*:\s*(.+)$/);
+    if (p4 && results.length > 0) { results.push({ name: p4[1].trim(), text: p4[2].trim() }); continue; }
+
+    // 이어지는 줄 (이전 메시지에 붙이기)
+    if (results.length > 0 && !line.startsWith('[') && !line.match(/^\d{4}/)) {
+      results[results.length - 1].text += '\n' + line;
+    }
+  }
+
+  if (detectedDate) {
+    document.getElementById('chatDate').value = detectedDate;
+  }
+  return results;
+}
+
+// 엑셀 파싱
+function parseXlsx(data) {
+  if (data.length < 2) return [];
+  const headers = data[0].map(h => (h || '').toString().toLowerCase().trim());
+  
+  // 이름/발신자 열 찾기
+  let nameCol = headers.findIndex(h => h.includes('이름') || h.includes('name') || h.includes('발신') || h.includes('보낸'));
+  // 내용/메시지 열 찾기  
+  let textCol = headers.findIndex(h => h.includes('내용') || h.includes('메시지') || h.includes('message') || h.includes('text') || h.includes('content'));
+  // 날짜 열 찾기
+  let dateCol = headers.findIndex(h => h.includes('날짜') || h.includes('date') || h.includes('일시'));
+
+  // 헤더에서 못 찾으면 첫 두 열을 이름/내용으로
+  if (nameCol === -1 && textCol === -1) {
+    if (data[0].length >= 2) { nameCol = 0; textCol = 1; }
+    else return [];
+  }
+  if (nameCol === -1) nameCol = 0;
+  if (textCol === -1) textCol = nameCol === 0 ? 1 : 0;
+
+  const results = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const name = (row[nameCol] || '').toString().trim();
+    const text = (row[textCol] || '').toString().trim();
+    if (name && text) {
+      results.push({ name, text });
+    }
+  }
+
+  // 날짜 감지
+  if (dateCol !== -1 && data[1] && data[1][dateCol]) {
+    document.getElementById('chatDate').value = data[1][dateCol].toString().trim();
+  }
+  return results;
+}
+
+// ── 참여자 매핑 모달 ──
+function showMappingModal(parsed) {
+  pendingImportData = parsed;
+  const uniqueNames = [...new Set(parsed.map(m => m.name))];
+  const rows = document.getElementById('mappingRows');
+  rows.innerHTML = '';
+  uniqueNames.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'mapping-row';
+    row.innerHTML = `
+      <span class="name-tag">${escapeHtml(name)}</span>
+      <select data-name="${escapeHtml(name)}">
+        <option value="right">오른쪽 (나)</option>
+        <option value="left" selected>왼쪽 (상대)</option>
+      </select>`;
+    // 첫번째 이름은 기본 오른쪽
+    if (uniqueNames.indexOf(name) === 0) {
+      row.querySelector('select').value = 'right';
+    }
+    rows.appendChild(row);
+  });
+  document.getElementById('mappingModal').classList.add('show');
+}
+
+function closeMappingModal() { document.getElementById('mappingModal').classList.remove('show'); pendingImportData = null; }
+
+function applyMapping() {
+  if (!pendingImportData) return;
+  saveState();
+  const selects = document.getElementById('mappingRows').querySelectorAll('select');
+  const sideMap = {};
+  selects.forEach(s => { sideMap[s.dataset.name] = s.value; });
+
+  // 참여자 생성
+  const uniqueNames = [...new Set(pendingImportData.map(m => m.name))];
+  participants = uniqueNames.map((name, i) => ({
+    id: 'p_imp_' + i,
+    name,
+    side: sideMap[name] || 'left',
+    avatar: null,
+  }));
+
+  // 메시지 생성
+  messages = pendingImportData.map((m, i) => {
+    const p = participants.find(x => x.name === m.name);
+    return { id: 'mi_' + i, senderId: p ? p.id : participants[0].id, text: m.text };
+  });
+
+  renderParticipants();
+  renderMessages();
+  closeMappingModal();
+  showToast(`✅ ${messages.length}개 메시지를 불러왔습니다!`);
+}
+
+// ── 토스트 ──
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ── HTML 생성 ──
+function generateTistoryHTML() {
+  const t = THEMES[currentTheme];
+  const chatDate = document.getElementById('chatDate').value.trim();
+  let h = `<div style="max-width:480px;margin:24px auto;font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:${t.containerBg};border-radius:20px;padding:24px 20px;border:1px solid ${t.border};box-shadow:0 4px 24px rgba(0,0,0,0.08);">\n`;
+
+  messages.forEach((msg, i) => {
+    const p = participants.find(x => x.id === msg.senderId); if (!p) return;
+    const isR = p.side === 'right'; const prev = messages[i-1]; const same = prev && prev.senderId === msg.senderId;
+    const mt = same ? '3px' : '16px';
+    const bBg = isR ? t.bubbleRight : t.bubbleLeft;
+    const bC = isR ? t.bubbleRightColor : t.bubbleLeftColor;
+    const bBR = isR ? 'border-bottom-right-radius:6px;' : 'border-bottom-left-radius:6px;';
+    const tA = isR ? 'right' : 'left'; const fD = isR ? 'row-reverse' : 'row';
+    const shadowR = isR ? `box-shadow:0 2px 8px rgba(0,0,0,0.08);` : `box-shadow:0 1px 4px rgba(0,0,0,0.06);`;
+    let av = '';
+    if (!same) {
+      av = p.avatar
+        ? `<img src="${p.avatar}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,0.1);" alt="${escapeHtml(p.name)}">`
+        : `<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(145deg,${t.avatarGrad1},${t.avatarGrad2});display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,0.1);">${escapeHtml(p.name[0])}</div>`;
+    } else { av = `<div style="width:38px;flex-shrink:0;"></div>`; }
+    const nm = !same ? `<div style="font-size:11px;font-weight:600;color:${t.nameColor};margin-bottom:3px;padding:0 4px;text-align:${tA};letter-spacing:0.3px;">${escapeHtml(p.name)}</div>` : '';
+    const txt = escapeHtml(msg.text).replace(/\n/g, '<br>');
+    h += `<div style="display:flex;flex-direction:${fD};gap:10px;align-items:flex-end;margin-top:${mt};">\n  ${av}\n  <div style="max-width:70%;">\n    ${nm}    <div style="padding:10px 16px;border-radius:20px;${bBR}background:${bBg};color:${bC};font-size:14px;line-height:1.65;${shadowR}">${txt}</div>\n  </div>\n</div>\n`;
+  });
+
+  if (chatDate) {
+    h += `<div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid ${t.border};">\n  <span style="font-size:11px;font-weight:500;color:${t.dateColor};background:${t.dateBg};padding:5px 18px;border-radius:20px;display:inline-block;letter-spacing:0.5px;">${escapeHtml(chatDate)}</span>\n</div>\n`;
+  }
+  h += `</div>`; return h;
+}
+
+function exportHTML() { if(!messages.length){alert('먼저 메시지를 추가해 주세요!');return;} document.getElementById('codeOutput').value=generateTistoryHTML(); document.getElementById('codeModal').classList.add('show'); }
+function closeCode() { document.getElementById('codeModal').classList.remove('show'); }
+function copyCode() { const o=document.getElementById('codeOutput'); o.select(); document.execCommand('copy'); const b=document.querySelector('.copy-btn'); b.textContent='✅ 복사됨!'; setTimeout(()=>b.textContent='📋 코드 복사',1500); }
+function showPreview() { if(!messages.length){alert('먼저 메시지를 추가해 주세요!');return;} document.getElementById('previewContent').innerHTML=generateTistoryHTML(); document.getElementById('previewModal').classList.add('show'); }
+function closePreview() { document.getElementById('previewModal').classList.remove('show'); }
+
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target===o) o.classList.remove('show'); });
+});
+
+// ── 초기화 ──
+renderThemeChips(); renderColorCustom(); renderParticipants();
+messages = [
+  { id:'m1', senderId:'p2', text:'여기서 대화 백업을 할 수 있어요!' },
+  { id:'m2', senderId:'p1', text:'txt, 엑셀 파일을 불러올 수 있어요.' },
+  { id:'m3', senderId:'p2', text:'테마도 변경 가능합니다!' },
+  { id:'m4', senderId:'p1', text:'당연히 커스텀도 가능합니다.' },
+];
+renderMessages();
+</script>
+</body>
+</html>
